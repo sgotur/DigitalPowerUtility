@@ -62,25 +62,12 @@ def send():
         "measure_value": measureValue,
         "time": current_time
         }
-        # reads = []
-        # for i in range(6):
-        #     max = i*100 + 75
-        #     reads.append(random.randint(5,max))
-        
-        # if meter == "SA65005":
-        #     payload["device_data"] = {"10262/0/2": "[" + str(event_ts) +  ", 10800, " + str(reads) + "]",
-        #                     "10263/0": "[" + str(event_ts) + ",10278,1]"}
-        # elif meter == "SA65001":
-        #     payload["device_data"] = {"10262/0/2": "[" + str(event_ts) +  ", 10800, " + str(reads) + "]",
-        #                     "10263/0": "[" + str(event_ts) + ",10276,1]"}
-        # else:
-        #     payload["device_data"] = {"10262/0/2": "[" + str(event_ts) +  ", 10800, " + str(reads) + "]"}
 
         mqttc.json_encode=json_encode
         
         #Encoding into JSON
         payload_json = mqttc.json_encode(payload)
-        mqttc.publish("DWM_Payload", payload_json, 0)
+        mqttc.publish("dpu/readings", payload_json, 0)
         print("Message published for {0} with payload {1}".format(meter, payload))
         time.sleep(3)
     print("Message published for all devices.")
