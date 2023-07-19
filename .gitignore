@@ -1,0 +1,6 @@
+*.pem
+*.log
+*.bkp
+*.dtmp
+temp/
+.DS_Store

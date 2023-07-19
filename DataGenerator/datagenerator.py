@@ -28,7 +28,7 @@ import time
 import random
 
 meters = ["Customer_Meter_1", "Customer_Meter_2", "Customer_Meter_3", "Customer_Meter_4", "Customer_Meter_5", "Customer_Meter_6", "Customer_Meter_7", "Customer_Meter_8", "Customer_Meter_9", "Customer_Meter_10", "Customer_Meter_11"]
-
+measure_data= dict()
 #Setup our MQTT client and security certificates
 #Make sure your certificate names match what you downloaded from AWS IoT
 
@@ -42,25 +42,42 @@ mqttc.configureCredentials("./rootCA.pem","./privateKey.pem","./certificate.pem"
 def json_encode(string):
         return json.dumps(string)
 
-#write a function to create random float value between 19.20 to 33.24
-def random_measure_value_float():
-    return round(random.uniform(19.20,33.24),2)
+# #write a function to create random float value between 19.20 to 33.24
+# def random_measure_value_float():
+#     return round(random.uniform(19.20,33.24),2)
 
-#create a function to return a string from a random array
+# Function to return a string from a random array
 def random_meter_id():
     meter_id = random.choice(meters)
     return meter_id
 
+# Random floating point generator
+def random_float_gen(initialValue, endValue, deimalPlace):
+     return round(random.uniform(initialValue,endValue),deimalPlace)
+
+
+# Function to create random float value for all the measure values
+def generate_measure_data():
+     measure_data['voltage']=random_float_gen(280.1,289.9,2)
+     measure_data['rssi']=random_float_gen(-49,-56,0)
+     measure_data['current']=random_float_gen(45,80,0)
+     measure_data['pf']=random_float_gen(0.80,1,2)
+     
 
 #This sends our test message to the iot topic
 def send():
     current_time = int(time.time() * 1000)
     for meter in meters:
-        measureValue=random_measure_value_float()
+        generate_measure_data()
+        dimensions = [
+                {'Name': 'meter_id', 'Value': meter},
+            ]
         payload ={
-        "meter_id": meter,
-        "measure_value": measureValue,
-        "time": current_time
+        'Dimensions': dimensions,
+        'measure_name': measureName,
+        'measure_value': measureValue,
+        'MeasureValueType':'float',
+        'time': current_time
         }
 
         mqttc.json_encode=json_encode
