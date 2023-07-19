@@ -68,25 +68,26 @@ def generate_measure_data():
 def send():
     current_time = int(time.time() * 1000)
     for meter in meters:
-        generate_measure_data()
-        dimensions = [
-                {'Name': 'meter_id', 'Value': meter},
-            ]
-        payload ={
-        'Dimensions': dimensions,
-        'measure_name': measureName,
-        'measure_value': measureValue,
-        'MeasureValueType':'float',
-        'time': current_time
-        }
+       generate_measure_data()
+       for k in measure_data:
+            dimensions = [
+                    {'Name': 'meter_id', 'Value': meter},
+                ]
+            payload ={
+            'Dimensions': dimensions,
+            'measure_name': k,
+            'measure_value':measure_data[k],
+            'MeasureValueType':'float',
+            'time': current_time
+            }
 
-        mqttc.json_encode=json_encode
-        
-        #Encoding into JSON
-        payload_json = mqttc.json_encode(payload)
-        mqttc.publish("dpu/readings", payload_json, 0)
-        print("Message published for {0} with payload {1}".format(meter, payload))
-        time.sleep(3)
+            mqttc.json_encode=json_encode
+            
+            #Encoding into JSON
+            payload_json = mqttc.json_encode(payload)
+            mqttc.publish("dpu/readings", payload_json, 0)
+            print("Message published for {0} with payload {1}".format(meter, payload))
+            time.sleep(3)
     print("Message published for all devices.")
 
 
