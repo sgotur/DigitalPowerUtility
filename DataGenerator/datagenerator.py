@@ -70,14 +70,15 @@ def send():
     for meter in meters:
        generate_measure_data()
        for k in measure_data:
-            dimensions = [
-                    {'Name': 'meter_id', 'Value': meter},
-                ]
+            # dimensions = [
+            #         {'Name': 'meter_id', 'Value': meter},
+            #     ]
             payload ={
-            'Dimensions': dimensions,
+            'meter_id':meter,
+            # 'Dimensions': dimensions,
             'measure_name': k,
             'measure_value':measure_data[k],
-            'MeasureValueType':'float',
+            'measurevaluetype':'float',
             'time': current_time
             }
 
