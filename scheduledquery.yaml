@@ -12,7 +12,7 @@ Parameters:
   S3Prefix:
     Type: String
     Default: myquery
-    Description: >
+    Description: 
       Prefix to save scheduled query errors.
       Timestream will append a slash
   SQEnabledSelector:
@@ -141,7 +141,7 @@ Resources:
         from pivot
         group by meter_id, time
       ScheduleConfiguration: 
-        ScheduleExpression: "rate(1 minutes)"
+        ScheduleExpression: "rate(23 hours)"
       ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
       TargetConfiguration: 
         TimestreamConfiguration: 
