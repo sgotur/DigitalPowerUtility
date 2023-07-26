@@ -27,7 +27,7 @@ import json
 import time
 import random
 
-meters = ["Customer_Meter_1", "Customer_Meter_2", "Customer_Meter_3", "Customer_Meter_4", "Customer_Meter_5", "Customer_Meter_6", "Customer_Meter_7", "Customer_Meter_8", "Customer_Meter_9", "Customer_Meter_10", "Customer_Meter_11"]
+meters = ['Customer_Meter_1', 'Customer_Meter_2', 'Customer_Meter_3', 'Customer_Meter_4', 'Customer_Meter_5', 'Customer_Meter_6', 'Customer_Meter_7', 'Customer_Meter_8', 'Customer_Meter_9', 'Customer_Meter_10', 'Customer_Meter_11']
 measure_data= dict()
 #Setup our MQTT client and security certificates
 #Make sure your certificate names match what you downloaded from AWS IoT
@@ -70,15 +70,9 @@ def send():
     for meter in meters:
        generate_measure_data()
        for k in measure_data:
-            # dimensions = [
-            #         {'Name': 'meter_id', 'Value': meter},
-            #     ]
             payload ={
             'meter_id':meter,
-            # 'Dimensions': dimensions,
-            'measure_name': k,
-            'measure_value':measure_data[k],
-            'measurevaluetype':'float',
+            k:measure_data[k],
             'time': current_time
             }
 
