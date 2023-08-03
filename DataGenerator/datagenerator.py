@@ -89,6 +89,7 @@ def send():
 #Connect to the gateway
 mqttc.connect()
 print("Connected")
+print("test")
 
 #Loop until terminated
 while True:
