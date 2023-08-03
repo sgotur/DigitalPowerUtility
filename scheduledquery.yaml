@@ -1,52 +1,56 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Create a Timestream database and a tables and scheduled query
 Parameters:
+  TSDatabase:
+    Type: String
+    Default: sample
+  TSTable:
+    Type: String
+    Default: dw_data
   S3BucketName:
     Type: String
-    Default: dpu-timestream-test
+    Default: sg-dpu-timestream-0831
     Description: Name of the new bucket to send timestream errors to
   S3AccessLogsBucketName:
     Type: String
-    Default: dpu-error-log
+    Default: sg-dpu-error-log-0831
     Description: Name of the bucket to send S3 access logs to, from the bucket this template will create
   S3Prefix:
     Type: String
     Default: myquery
-    Description: 
+    Description: >
       Prefix to save scheduled query errors.
       Timestream will append a slash
   SQEnabledSelector:
     Description: Select the lab to be created
     AllowedValues:
-      - 'true'
-      - 'false'
-    Default: 'true'
+      - "true"
+      - "false"
+    Default: "true"
     Type: String
   Params:
     Description: Params send to custom resource
     Type: String
     Default: "arg1,arg2,arg3"
-
-
 Conditions:
   EnableSQ: !Equals
     - !Ref SQEnabledSelector
-    - 'true'
+    - "true"
+
 Resources:
   MyDatabase:
     Type: AWS::Timestream::Database
   MyTable:
     Type: AWS::Timestream::Table
-    Properties: 
+    Properties:
       DatabaseName: !Ref MyDatabase
       RetentionProperties:
         MemoryStoreRetentionPeriodInHours: "24"
         MagneticStoreRetentionPeriodInDays: "7"
-
   MyAggregatedTable:
     Type: AWS::Timestream::Table
-    Properties: 
-      DatabaseName: !Ref MyDatabase
+    Properties:
+      DatabaseName: !Ref TSDatabase
       RetentionProperties:
         MemoryStoreRetentionPeriodInHours: "24"
         MagneticStoreRetentionPeriodInDays: "7"
@@ -58,115 +62,124 @@ Resources:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
-          -
-            Effect: "Allow"
+          - Effect: "Allow"
             Principal:
               Service:
                 - "timestream.amazonaws.com"
             Action:
               - "sts:AssumeRole"
       Path: "/"
-#      PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/amp_boundary_policy"
+      #      PermissionsBoundary: !Sub "arn:aws:iam::${AWS::AccountId}:policy/amp_boundary_policy"
       ManagedPolicyArns:
-#      - !Sub "arn:aws:iam::${AWS::AccountId}:policy/amp_deny_policy"
-      - !Ref SQPolicy
+        #      - !Sub "arn:aws:iam::${AWS::AccountId}:policy/amp_deny_policy"
+        - !Ref SQPolicy
 
   SQPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: "AWS::IAM::ManagedPolicy"
     Properties:
       Description: "Allow timestream scheduled query"
       #ManagedPolicyName: timestream-sq-test
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Action:
-            - sns:Publish
-          Resource:
-            - !Ref ScheduledQuerySNS
-        - Effect: Allow
-          Action:
-            - s3:ListBucket
-          Resource:
-            - !GetAtt S3Bucket.Arn
-        - Effect: Allow
-          Action:
-            - s3:PutObject
-            - s3:GetObject
-            - s3:GetObjectVersion
-          Resource:
-            - !Sub "${S3Bucket.Arn}/${S3Prefix}/*"
-        - Effect: Allow
-          Action:
-            - timestream:DescribeEndpoints
-            - timestream:SelectValues
-          Resource:
-            - "*" # cannot be restricted
-        - Effect: Allow
-          Action:
-            - timestream:Select
-          Resource:
-            - !GetAtt MyTable.Arn
-        - Effect: Allow
-          Action:
-            - timestream:Select # is this required?
-            - timestream:WriteRecords
-          Resource:
-            - !GetAtt MyAggregatedTable.Arn
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource:
+              - !Ref ScheduledQuerySNS
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !GetAtt S3Bucket.Arn
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource:
+              - !Sub "${S3Bucket.Arn}/${S3Prefix}/*"
+          - Effect: Allow
+            Action:
+              - timestream:DescribeEndpoints
+              - timestream:SelectValues
+            Resource:
+              - "*" # cannot be restricted
+          - Effect: Allow
+            Action:
+              - timestream:Select
+            Resource:
+              - !GetAtt MyTable.Arn
+          - Effect: Allow
+            Action:
+              - timestream:Select # is this required?
+              - timestream:WriteRecords
+            Resource:
+              - "*" #GetAtt MyAggregatedTable.Arn
 
   MyScheduledQuery:
     Type: AWS::Timestream::ScheduledQuery
     Condition: EnableSQ
-    DependsOn: CustomResource
-    Properties: 
-      ErrorReportConfiguration: 
-        S3Configuration: 
+    # DependsOn: CustomResource
+    Properties:
+      ErrorReportConfiguration:
+        S3Configuration:
           BucketName: !Ref S3Bucket
           ObjectKeyPrefix: !Ref S3Prefix
       NotificationConfiguration:
-        SnsConfiguration: 
+        SnsConfiguration:
           TopicArn: !Ref ScheduledQuerySNS
       QueryString: !Sub |
-       with pivot as (
+        with pivot as (
         select meter_id,time,
         case when measure_name = 'current' then measure_value::double end as current,
         case when measure_name = 'rssi' then measure_value::double end as rssi,
         case when measure_name = 'pf' then measure_value::double end as pf,
-        case when measure_name = 'voltage' then measure_value::double end as voltage
-        from "DPU"."customer_single_table"
-        where time between '2023-07-18 00:00:22.631000000' and '2023-07-19 22:00:00.631000000'
+        case when measure_name = 'voltage' then measure_value::double end as voltage 
+        FROM "sample"."dw_data"
+        where time between bin(now(), 5m) - 1h AND now()
         )
         select meter_id,time,
-        max("current") as "current", max("rssi") as "rssi", max("pf") as "pf", max("voltage") as "voltage"
+        max("current") as "current",
+        max("rssi") as "rssi",
+        max("pf") as "pf",
+        max("voltage") as "voltage",
+        'Customer-Meter' as "measure_name"
         from pivot
         group by meter_id, time
-      ScheduleConfiguration: 
-        ScheduleExpression: "rate(23 hours)"
+      ScheduleConfiguration:
+        ScheduleExpression: "rate(1 minutes)"
       ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
-      TargetConfiguration: 
-        TimestreamConfiguration: 
-          DatabaseName: !Ref MyDatabase
-          DimensionMappings: 
-           - DimensionValueType: "VARCHAR"
-             Name: "dim"
+      TargetConfiguration:
+        TimestreamConfiguration:
+          DatabaseName: !Ref TSDatabase
+          DimensionMappings:
+            - DimensionValueType: "VARCHAR"
+              Name: "meter_id"
           MeasureNameColumn: "measure_name"
-          MultiMeasureMappings: 
-            MultiMeasureAttributeMappings: 
-             - MeasureValueType: "DOUBLE"
-               SourceColumn: "x"
-               TargetMultiMeasureAttributeName: "a"
-             - MeasureValueType: "DOUBLE"
-               SourceColumn: "y"
-               TargetMultiMeasureAttributeName: "b"
+          MultiMeasureMappings:
+            MultiMeasureAttributeMappings:
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "current"
+                TargetMultiMeasureAttributeName: "current"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "rssi"
+                TargetMultiMeasureAttributeName: "rssi"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "pf"
+                TargetMultiMeasureAttributeName: "pf"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "voltage"
+                TargetMultiMeasureAttributeName: "voltage"
           TableName: !GetAtt MyAggregatedTable.Name
           TimeColumn: "time"
 
   ScheduledQuerySNS:
     Type: AWS::SNS::Topic
-      
+
   S3Bucket:
     # DeletionPolicy: Retain
-    Type: 'AWS::S3::Bucket'
+    Type: "AWS::S3::Bucket"
     Description: Test for timestream scheduled query
     Properties:
       BucketName: !Ref S3BucketName
@@ -182,9 +195,9 @@ Resources:
               SSEAlgorithm: AES256
       VersioningConfiguration:
         Status: Enabled
-      LoggingConfiguration:
-        DestinationBucketName: !Ref S3AccessLogsBucketName
-        LogFilePrefix: ${S3AccessLogsBucketName}/${S3BucketName}/
+      # LoggingConfiguration:
+      #   DestinationBucketName: !Ref S3AccessLogsBucketName
+      #   LogFilePrefix: ${S3AccessLogsBucketName}/${S3BucketName}/
 
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -193,17 +206,17 @@ Resources:
       PolicyDocument:
         Version: 2012-10-17
         Statement:
-        # S3 API allows unencrypted traffic by default
-        - Sid: Require TLS
-          Effect: Deny
-          Principal: "*" 
-          Action: 
-          - "s3:*"
-          Resource:
-          - !Sub "${S3Bucket.Arn}/*" 
-          Condition: 
-            Bool:
-              "aws:SecureTransport": "false"
+          # S3 API allows unencrypted traffic by default
+          - Sid: Require TLS
+            Effect: Deny
+            Principal: "*"
+            Action:
+              - "s3:*"
+            Resource:
+              - !Sub "${S3Bucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
 
 Outputs:
   DatabaseName:
