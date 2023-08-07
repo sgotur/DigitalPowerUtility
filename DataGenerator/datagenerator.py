@@ -17,34 +17,53 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Lab 1 - Setting up.
-# Make sure your host and region are correct.
+# Make sure your region is correct.
+# Make sure to handle exceptions if you are using the snippets in your projects.
 
 import sys
 import ssl
-from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 import json
 import time
 import random
+import argparse
+import os
+from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 
-meters = ['Customer_Meter_1', 'Customer_Meter_2', 'Customer_Meter_3', 'Customer_Meter_4', 'Customer_Meter_5', 'Customer_Meter_6', 'Customer_Meter_7', 'Customer_Meter_8', 'Customer_Meter_9', 'Customer_Meter_10', 'Customer_Meter_11']
+meters = [
+            'Customer_Meter_1',
+            'Customer_Meter_2',
+            'Customer_Meter_3',
+            'Customer_Meter_4',
+            'Customer_Meter_5',
+            'Customer_Meter_6',
+            'Customer_Meter_7',
+            'Customer_Meter_8',
+            'Customer_Meter_9',
+            'Customer_Meter_10',
+            'Customer_Meter_11'
+            ]
+
 measure_data= dict()
-#Setup our MQTT client and security certificates
-#Make sure your certificate names match what you downloaded from AWS IoT
 
-mqttc = AWSIoTMQTTClient("DWM_Device")
+# Get the AWS IoT Core endpoint url.
+parser = argparse.ArgumentParser()
+parser.add_argument('-e', '--endpoint', type=str, required=True, help='AWS IoT Core endpoint url that AWSIoTMQTTClient connects to.')
+args = vars(parser.parse_args())
+endpoint = args['endpoint']
 
-# IoT core is created in Sydney
-mqttc.configureEndpoint("aolb19ki9crxp-ats.iot.us-east-2.amazonaws.com", 8883)
-mqttc.configureCredentials("./rootCA.pem","./privateKey.pem","./certificate.pem")
+# Get the current directory path.
+script_path = os.path.dirname(os.path.realpath(__file__))
+print(script_path)
 
-#Function to encode a payload into JSON
+# Setup our MQTT client and security certificates.
+# Make sure your certificate names match what you downloaded from AWS IoT.
+mqttc = AWSIoTMQTTClient("DPU_Meter_Simulator")
+mqttc.configureEndpoint(endpoint, 8883)
+mqttc.configureCredentials(script_path + "/rootCA.pem", script_path + "/privateKey.pem", script_path + "/certificate.pem")
+
+#Function to encode a payload into JSON.
 def json_encode(string):
         return json.dumps(string)
-
-# #write a function to create random float value between 19.20 to 33.24
-# def random_measure_value_float():
-#     return round(random.uniform(19.20,33.24),2)
 
 # Function to return a string from a random array
 def random_meter_id():
@@ -56,7 +75,7 @@ def random_float_gen(initialValue, endValue, deimalPlace):
      return round(random.uniform(initialValue,endValue),deimalPlace)
 
 
-# Function to create random float value for all the measure values
+# Function to create random float value for all the measure values. The range is based on real world examples.
 def generate_measure_data():
      measure_data['voltage']=random_float_gen(280.1,289.9,2)
      measure_data['rssi']=random_float_gen(-49,-56,0)
@@ -64,7 +83,8 @@ def generate_measure_data():
      measure_data['pf']=random_float_gen(0.80,1,2)
      
 
-#This sends our test message to the iot topic
+# This sends our message to the AWS IoT core using the specified topic.
+
 def send():
     current_time = int(time.time() * 1000)
     for meter in meters:
@@ -75,10 +95,7 @@ def send():
             k:measure_data[k],
             'time': current_time
             }
-
-            mqttc.json_encode=json_encode
-            
-            #Encoding into JSON
+            mqttc.json_encode=json_encode        
             payload_json = mqttc.json_encode(payload)
             mqttc.publish("dpu/readings", payload_json, 0)
             print("Message published for {0} with payload {1}".format(meter, payload))
@@ -86,15 +103,19 @@ def send():
     print("Message published for all devices.")
 
 
-#Connect to the gateway
-mqttc.connect()
-print("Connected")
-print("test")
+def main():
+    # Connect to the AWS IoT Core.
+    mqttc.connect()
+    print("Connected to AWS IoT Core.")
+    # To check and see if your message was published to the message broker go to the MQTT Client and subscribe to the iot topic
+    # and you should see your JSON Payload
 
-#Loop until terminated
-while True:
-    send()
-    time.sleep(5)
+    # Loop until terminated
+    while True:
+        send()
+        time.sleep(5)
+        
+    mqttc.disconnect()
 
-mqttc.disconnect()
-#To check and see if your message was published to the message broker go to the MQTT Client and subscribe to the iot topic and you should see your JSON Payload
+if __name__ == "__main__":
+     main()
