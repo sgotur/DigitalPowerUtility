@@ -36,7 +36,6 @@ Conditions:
   EnableSQ: !Equals
     - !Ref SQEnabledSelector
     - "true"
-
 Resources:
   MyDatabase:
     Type: AWS::Timestream::Database
@@ -73,7 +72,6 @@ Resources:
       ManagedPolicyArns:
         #      - !Sub "arn:aws:iam::${AWS::AccountId}:policy/amp_deny_policy"
         - !Ref SQPolicy
-
   SQPolicy:
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
@@ -136,7 +134,7 @@ Resources:
         case when measure_name = 'rssi' then measure_value::double end as rssi,
         case when measure_name = 'pf' then measure_value::double end as pf,
         case when measure_name = 'voltage' then measure_value::double end as voltage 
-        FROM "sample"."dw_data"
+        FROM "harmonics"."customer-meter-data-raw"
         where time between bin(now(), 5m) - 1h AND now()
         )
         select meter_id,time,
@@ -149,6 +147,76 @@ Resources:
         group by meter_id, time
       ScheduleConfiguration:
         ScheduleExpression: "rate(1 minutes)"
+      ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
+      TargetConfiguration:
+        TimestreamConfiguration:
+          DatabaseName: !Ref TSDatabase
+          DimensionMappings:
+            - DimensionValueType: "VARCHAR"
+              Name: "meter_id"
+          MeasureNameColumn: "measure_name"
+          MultiMeasureMappings:
+            MultiMeasureAttributeMappings:
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "current"
+                TargetMultiMeasureAttributeName: "current"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "rssi"
+                TargetMultiMeasureAttributeName: "rssi"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "pf"
+                TargetMultiMeasureAttributeName: "pf"
+              - MeasureValueType: "DOUBLE"
+                SourceColumn: "voltage"
+                TargetMultiMeasureAttributeName: "voltage"
+          TableName: !GetAtt MyAggregatedTable.Name
+          TimeColumn: "time"
+  WaitHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  WaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: MyScheduledQuery
+    Properties:
+      Handle: !Ref 'WaitHandle'
+      Timeout: '5000'
+ 
+  MyCorrelatedScheduledQuery:
+    Type: AWS::Timestream::ScheduledQuery
+    Condition: EnableSQ
+    # DependsOn: CustomResource
+    Properties:
+      ErrorReportConfiguration:
+        S3Configuration:
+          BucketName: !Ref S3Bucket
+          ObjectKeyPrefix: !Ref S3Prefix
+      NotificationConfiguration:
+        SnsConfiguration:
+          TopicArn: !Ref ScheduledQuerySNS
+      QueryString: !Sub |
+        WITH cud_result AS (
+        SELECT meter_id,INTERPOLATE_LINEAR(
+            CREATE_TIME_SERIES(time, meter_measure_value),
+            SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result 
+        FROM "harmonics"."customer-meter-data"  
+        WHERE measure_name = 'meter-reading' 
+          AND time  between bin(now(), 5m) - 1h AND now() 
+        GROUP BY  meter_id, measure_name
+        ), 
+        hmd_result AS (
+            SELECT harmonic_meter_series_id, INTERPOLATE_LINEAR(
+                CREATE_TIME_SERIES(time, meter_measure_value), 
+              SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result  
+            FROM "harmonics"."harmonic-meter-data"  
+            WHERE measure_name = 'meter-reading' 
+           AND time  between bin(now(), 5m) - 1h AND now() 
+            GROUP BY  harmonic_meter_series_id, measure_name
+        ) 
+        SELECT cud_result.meter_id, hmd_result.harmonic_meter_series_id, correlate_pearson(cud_result.result, hmd_result.result) AS result 
+        FROM cud_result, hmd_result
+        order by 1,2
+
+      ScheduleConfiguration:
+        ScheduleExpression: "rate(1 hour)"
       ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
       TargetConfiguration:
         TimestreamConfiguration:
