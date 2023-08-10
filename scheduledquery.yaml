@@ -134,7 +134,7 @@ Resources:
         case when measure_name = 'rssi' then measure_value::double end as rssi,
         case when measure_name = 'pf' then measure_value::double end as pf,
         case when measure_name = 'voltage' then measure_value::double end as voltage 
-        FROM "harmonics"."customer-meter-data-raw"
+        FROM "dpu"."customer-meter-data-raw"
         where time between bin(now(), 5m) - 1h AND now()
         )
         select meter_id,time,
@@ -197,7 +197,7 @@ Resources:
         SELECT meter_id,INTERPOLATE_LINEAR(
             CREATE_TIME_SERIES(time, meter_measure_value),
             SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result 
-        FROM "harmonics"."customer-meter-data"  
+        FROM "dpu"."customer-meter-data"  
         WHERE measure_name = 'meter-reading' 
           AND time  between bin(now(), 5m) - 1h AND now() 
         GROUP BY  meter_id, measure_name
@@ -206,7 +206,7 @@ Resources:
             SELECT harmonic_meter_series_id, INTERPOLATE_LINEAR(
                 CREATE_TIME_SERIES(time, meter_measure_value), 
               SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result  
-            FROM "harmonics"."harmonic-meter-data"  
+            FROM "dpu"."harmonic-meter-data"  
             WHERE measure_name = 'meter-reading' 
            AND time  between bin(now(), 5m) - 1h AND now() 
             GROUP BY  harmonic_meter_series_id, measure_name
