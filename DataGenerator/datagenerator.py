@@ -77,7 +77,7 @@ def read_and_publish_harmonics_data():
     topic = 'dpu/harmonics-meter-data'
     for index, row in df_meter_data.iterrows():
         ctime = row['Read_Date_Timestamp_Local']
-        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp()) * 1000
         measure = row['harmonic_meter_series_id']
         value = row['value']
         publish_harmonics_data(topic, timestamp, measure, value)
@@ -91,7 +91,7 @@ def read_and_publish_customer_meter_data():
     for index, row in df_meter_data.iterrows():
         meterid = row['meter_id']
         ctime = row['local_interval_datetime']
-        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp()) * 1000
         kwh = row['kwh']
         voltage = row['voltage']
         rssi = row['rssi']

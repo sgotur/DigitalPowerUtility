@@ -54,7 +54,7 @@ Resources:
                 - Name: meter_id
                   Value: '${meter_id}'
               Timestamp:
-                Unit: SECONDS
+                Unit: MILLISECONDS
                 Value: ${timestamp}
               RoleArn: !GetAtt 
                 - TimestreamWriteRole
@@ -79,7 +79,7 @@ Resources:
                 - Name: meter_id
                   Value: '${meter_id}'
               Timestamp:
-                Unit: SECONDS
+                Unit: MILLISECONDS
                 Value: ${timestamp}
               RoleArn: !GetAtt 
                 - TimestreamWriteRole
