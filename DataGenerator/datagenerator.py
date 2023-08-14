@@ -1,6 +1,7 @@
 import pandas as pd
 import json
 import time
+import datetime
 import argparse
 import os
 from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
@@ -8,7 +9,7 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 # Get the script parameters: a) AWS IoT Core endpoint url. b) publish option: customer or harmonics data
 parser = argparse.ArgumentParser()
 parser.add_argument('-e', '--endpoint', type=str, required=True, help='AWS IoT Core endpoint url that AWSIoTMQTTClient connects to.')
-parser.add_argument('-o', '--option', type=str, required=True, help='CUSTOMER: publishing customer data  HARMONICS: publishing harmonics data')
+parser.add_argument('-o', '--option', type=str, required=False, default='ALL', help='CUSTOMER: publishing customer data  HARMONICS: publishing harmonics data')
 args = vars(parser.parse_args())
 endpoint = args['endpoint']
 option = args['option']
@@ -16,25 +17,25 @@ option = args['option']
 # Get the current directory path.
 script_path = os.path.dirname(os.path.realpath(__file__))
 mqttc_port = 8883
-sleep_interval = 5  # second
+sleep_interval = 1  # second
 
 # Setup our MQTT client and security certificates.
 # Make sure your certificate names match what you downloaded from AWS IoT.
 mqttc = AWSIoTMQTTClient("PQ_Meter_Simulator")
 mqttc.configureEndpoint(endpoint, mqttc_port)
-mqttc.configureCredentials(script_path + "/certs/rootCA1.pem", script_path + "/certs/privateKey.pem",
-                                script_path + "/certs/certificate.pem")
+mqttc.configureCredentials(script_path + "/rootCA.pem", script_path + "/privateKey.pem",
+                                script_path + "/certificate.pem")
 
-#Function to encode a payload into JSON.
+# Function to encode a payload into JSON.
 def json_encode(string):
     return json.dumps(string)
 
-#publish customer multi measure data: kwh, voltage, rssi, and pf
-def publish_customer_data(topic, meterid, ctime, uom, value):
+# publish customer multi measure data: kwh, voltage, rssi, and pf
+def publish_customer_data(topic, meterid, timestamp, uom, value):
     payload = {
             'meter_id': meterid,
              uom: value,
-            'time': ctime
+            'timestamp': timestamp
     }
     mqttc.json_encode = json_encode
     payload_json = mqttc.json_encode(payload)
@@ -42,10 +43,10 @@ def publish_customer_data(topic, meterid, ctime, uom, value):
     print("Message published for {0} with payload {1}".format(meterid, payload))
 
 #publish harmonics meter data
-def publish_harmonics_data(topic, ctime, measurement, value):
+def publish_harmonics_data(topic, timestamp, measurement, value):
     payload = {
             measurement: value,
-            'time': ctime
+            'timestamp': timestamp
     }
     mqttc.json_encode = json_encode
     payload_json = mqttc.json_encode(payload)
@@ -54,40 +55,54 @@ def publish_harmonics_data(topic, ctime, measurement, value):
 
 #publish customer or harmonics meter data based on user option
 def mqtt_publish_data():
-    data_file = './data/cust_metering_data.csv'
-    topic = "dpu/customer-meter-data"
-    if option == 'HARMONICS':
-       data_file = './data/harmonics_metering_data.csv'
-       topic = 'dpu/harmonics-meter-data'
-    df_meter_data = pd.read_csv(data_file)
     try:
-       mqttc.connect()
-       if option == 'CUSTOMER':
-          for index, row in df_meter_data.iterrows():
-              meterid = row['meter_id']
-              ctime = row['local_interval_datetime']
-              kwh = row['kwh']
-              voltage = row['voltage']
-              rssi = row['rssi']
-              pf = row['pf']
-              publish_customer_data(topic, meterid, ctime, 'kwh', kwh)
-              publish_customer_data(topic, meterid, ctime, 'voltage', voltage)
-              publish_customer_data(topic, meterid, ctime, 'rssi', rssi)
-              publish_customer_data(topic, meterid, ctime, 'pf', pf)
-              time.sleep(sleep_interval)
-       elif option == 'HARMONICS':
-          for index, row in df_meter_data.iterrows():
-              ctime = row['Read_Date_Timestamp_Local']
-              measure = row['harmonic_meter_series_id']
-              value = row['value']
-              publish_harmonics_data(topic, ctime, measure, value)
-              time.sleep(sleep_interval)
-       else:
+        mqttc.connect()
+        if option == 'CUSTOMER':
+           read_and_publish_customer_meter_data()
+        elif option == 'HARMONICS':
+          read_and_publish_harmonics_data()
+        elif option == 'ALL':
+           read_and_publish_customer_meter_data()
+           read_and_publish_harmonics_data()
+        else:
            print("Wrong Option {0} must be: CUSTOMER or HARMINICS".format(option))
            exit(1)
     except Exception as e:
        print("MQTT Publish Error: " + str(e))
 
+# Read and publish harmonics data.
+def read_and_publish_harmonics_data():
+    data_file = script_path + '/harmonics_metering_data.csv'
+    df_meter_data = pd.read_csv(data_file)
+    topic = 'dpu/harmonics-meter-data'
+    for index, row in df_meter_data.iterrows():
+        ctime = row['Read_Date_Timestamp_Local']
+        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+        measure = row['harmonic_meter_series_id']
+        value = row['value']
+        publish_harmonics_data(topic, timestamp, measure, value)
+        time.sleep(sleep_interval)
+
+# Read and publish customer meter data.
+def read_and_publish_customer_meter_data():
+    data_file = script_path + '/cust_metering_data.csv'
+    topic = "dpu/customer-meter-data"
+    df_meter_data = pd.read_csv(data_file)
+    for index, row in df_meter_data.iterrows():
+        meterid = row['meter_id']
+        ctime = row['local_interval_datetime']
+        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp())
+        kwh = row['kwh']
+        voltage = row['voltage']
+        rssi = row['rssi']
+        pf = row['pf']
+
+        publish_customer_data(topic, meterid, timestamp, 'kwh', kwh)
+        publish_customer_data(topic, meterid, timestamp, 'voltage', voltage)
+        publish_customer_data(topic, meterid, timestamp, 'rssi', rssi)
+        publish_customer_data(topic, meterid, timestamp, 'pf', pf)
+        time.sleep(sleep_interval)
+
 if __name__ == '__main__':
-    print("Endpoint {0} Option {1}".format(endpoint, option))
+    print("Endpoint: {0} | Option: {1}".format(endpoint, option))
     mqtt_publish_data()

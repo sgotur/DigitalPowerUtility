@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  'AWS::CloudFormation::Designer':
+    6dd134d6-5919-481b-a29b-4d6ec64cd302:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -170
+        'y': 90
+      z: 1
+      embeds: []
+    ce27b6cb-76f9-49e8-ac20-f70c790f4c80:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -60
+        'y': 90
+      z: 1
+      embeds: []
+    d64656b6-d921-4edd-aa2b-3a183625327d:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 70
+        'y': 90
+      z: 1
+      embeds: []
+      dependson:
+        - c2c8bed8-2023-4bf8-b0a7-d3c085a57533
+    c2c8bed8-2023-4bf8-b0a7-d3c085a57533:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 200
+        'y': 120
+      z: 1
+      embeds: []
+Resources:
+  DPUReadingsRule:
+    Type: 'AWS::IoT::TopicRule'
+    Properties:
+      RuleName: dpu_readings
+      TopicRulePayload:
+        Sql: SELECT * FROM 'dpu/customer-meter-data'
+        Actions:
+          - Timestream:
+              DatabaseName: !Ref TimestreamDB
+              TableName: !GetAtt CustomerMeterTable.Name
+              Dimensions:
+                - Name: meter_id
+                  Value: '${meter_id}'
+              Timestamp:
+                Unit: SECONDS
+                Value: ${timestamp}
+              RoleArn: !GetAtt 
+                - TimestreamWriteRole
+                - Arn
+    DependsOn:
+      - TimestreamWriteRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6dd134d6-5919-481b-a29b-4d6ec64cd302
+  
+  DPUHarmonicssRule:
+    Type: 'AWS::IoT::TopicRule'
+    Properties:
+      RuleName: dpu_harmonics
+      TopicRulePayload:
+        Sql: SELECT * FROM 'dpu/harmonics-meter-data'
+        Actions:
+          - Timestream:
+              DatabaseName: !Ref TimestreamDB
+              TableName: !GetAtt HarmonicMeterTable.Name
+              Dimensions:
+                - Name: meter_id
+                  Value: '${meter_id}'
+              Timestamp:
+                Unit: SECONDS
+                Value: ${timestamp}
+              RoleArn: !GetAtt 
+                - TimestreamWriteRole
+                - Arn
+    DependsOn:
+      - TimestreamWriteRole
+ 
+  TimestreamWriteRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: iot.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: TimestreamWritePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 'timestream:WriteRecords'
+                Resource: !GetAtt 
+                  - TimestreamDB
+                  - Arn
+              - Effect: Allow
+                Action: 'timestream:DescribeEndpoints'
+                Resource: '*'
+    DependsOn:
+      - CustomerMeterTable
+      - HarmonicMeterTable
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ce27b6cb-76f9-49e8-ac20-f70c790f4c80
+  
+  CustomerMeterTable:
+    Type: 'AWS::Timestream::Table'
+    Properties:
+      DatabaseName: !Ref TimestreamDB
+      MagneticStoreWriteProperties:
+        EnableMagneticStoreWrites: true
+      TableName: customer-meter-data
+      RetentionProperties:
+        MagneticStoreRetentionPeriodInDays: 3650
+        MemoryStoreRetentionPeriodInHours: 1
+    DependsOn:
+      - TimestreamDB
+  
+  HarmonicMeterTable:
+    Type: 'AWS::Timestream::Table'
+    Properties:
+      DatabaseName: !Ref TimestreamDB
+      MagneticStoreWriteProperties:
+        EnableMagneticStoreWrites: true
+      TableName: harmonic-meter-data
+      RetentionProperties:
+        MagneticStoreRetentionPeriodInDays: 3650
+        MemoryStoreRetentionPeriodInHours: 1
+    DependsOn:
+      - TimestreamDB  
+
+  TimestreamDB:
+    Type: 'AWS::Timestream::Database'
+    Properties:
+      DatabaseName: dpu
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: c2c8bed8-2023-4bf8-b0a7-d3c085a57533
