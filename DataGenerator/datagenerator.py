@@ -23,8 +23,8 @@ sleep_interval = 1  # second
 # Make sure your certificate names match what you downloaded from AWS IoT.
 mqttc = AWSIoTMQTTClient("PQ_Meter_Simulator")
 mqttc.configureEndpoint(endpoint, mqttc_port)
-mqttc.configureCredentials(script_path + "/rootCA.pem", script_path + "/privateKey.pem",
-                                script_path + "/certificate.pem")
+mqttc.configureCredentials(script_path + "/certs/rootCA.pem", script_path + "/certs/privateKey.pem",
+                                script_path + "/certs/certificate.pem")
 
 # Function to encode a payload into JSON.
 def json_encode(string):
@@ -35,7 +35,7 @@ def publish_customer_data(topic, meterid, timestamp, uom, value):
     payload = {
             'meter_id': meterid,
              uom: value,
-            'timestamp': timestamp
+            'time': timestamp
     }
     mqttc.json_encode = json_encode
     payload_json = mqttc.json_encode(payload)
@@ -45,8 +45,10 @@ def publish_customer_data(topic, meterid, timestamp, uom, value):
 #publish harmonics meter data
 def publish_harmonics_data(topic, timestamp, measurement, value):
     payload = {
-            measurement: value,
-            'timestamp': timestamp
+            'harmonic_meter_series_id':measurement,
+            'measure_name':'meter-reading',
+            'meter_measure_value': value,
+            'time': timestamp
     }
     mqttc.json_encode = json_encode
     payload_json = mqttc.json_encode(payload)
@@ -72,35 +74,33 @@ def mqtt_publish_data():
 
 # Read and publish harmonics data.
 def read_and_publish_harmonics_data():
-    data_file = script_path + '/harmonics_metering_data.csv'
+    data_file = script_path + '/data/harmonics_metering_data.csv'
     df_meter_data = pd.read_csv(data_file)
     topic = 'dpu/harmonics-meter-data'
     for index, row in df_meter_data.iterrows():
-        ctime = row['Read_Date_Timestamp_Local']
-        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp()) * 1000
+        ctime = int(datetime.datetime.strptime(row['Read_Date_Timestamp_Local'], '%Y-%m-%dT%H:%M:%SZ').timestamp() * 1000)
         measure = row['harmonic_meter_series_id']
         value = row['value']
-        publish_harmonics_data(topic, timestamp, measure, value)
+        publish_harmonics_data(topic, ctime, measure, value)
         time.sleep(sleep_interval)
 
 # Read and publish customer meter data.
 def read_and_publish_customer_meter_data():
-    data_file = script_path + '/cust_metering_data.csv'
+    data_file = script_path + '/data/cust_metering_data.csv'
     topic = "dpu/customer-meter-data"
     df_meter_data = pd.read_csv(data_file)
     for index, row in df_meter_data.iterrows():
         meterid = row['meter_id']
-        ctime = row['local_interval_datetime']
-        timestamp = int(datetime.datetime.strptime(ctime, '%Y-%m-%dT%H:%M:%SZ').timestamp()) * 1000
+        ctime = int(datetime.datetime.strptime(row['local_interval_datetime'], '%Y-%m-%dT%H:%M:%SZ').timestamp() * 1000)
         kwh = row['kwh']
         voltage = row['voltage']
         rssi = row['rssi']
         pf = row['pf']
 
-        publish_customer_data(topic, meterid, timestamp, 'kwh', kwh)
-        publish_customer_data(topic, meterid, timestamp, 'voltage', voltage)
-        publish_customer_data(topic, meterid, timestamp, 'rssi', rssi)
-        publish_customer_data(topic, meterid, timestamp, 'pf', pf)
+        publish_customer_data(topic, meterid, ctime, 'kwh', kwh)
+        publish_customer_data(topic, meterid, ctime, 'voltage', voltage)
+        publish_customer_data(topic, meterid, ctime, 'rssi', rssi)
+        publish_customer_data(topic, meterid, ctime, 'pf', pf)
         time.sleep(sleep_interval)
 
 if __name__ == '__main__':
