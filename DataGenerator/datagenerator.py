@@ -46,7 +46,6 @@ def publish_customer_data(topic, meterid, timestamp, uom, value):
 def publish_harmonics_data(topic, timestamp, meter_id, value):
     payload = {
             'harmonic_meter_series_id':meter_id,
-            # 'measure_name':'meter-reading',
             'harmonics_value': value,
             'time': timestamp
     }

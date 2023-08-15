@@ -45,7 +45,7 @@ Resources:
     Properties:
       RuleName: dpu_readings
       TopicRulePayload:
-        Sql: SELECT * FROM 'dpu/customer-meter-data'
+        Sql: SELECT kwh, voltage, rssi, pf FROM 'dpu/customer-meter-data'
         Actions:
           - Timestream:
               DatabaseName: !Ref TimestreamDB
@@ -55,7 +55,7 @@ Resources:
                   Value: '${meter_id}'
               Timestamp:
                 Unit: MILLISECONDS
-                Value: ${timestamp}
+                Value: ${time}
               RoleArn: !GetAtt 
                 - TimestreamWriteRole
                 - Arn
@@ -70,17 +70,17 @@ Resources:
     Properties:
       RuleName: dpu_harmonics
       TopicRulePayload:
-        Sql: SELECT * FROM 'dpu/harmonics-meter-data'
+        Sql: SELECT harmonics_value FROM 'dpu/harmonics-meter-data'
         Actions:
           - Timestream:
               DatabaseName: !Ref TimestreamDB
               TableName: !GetAtt HarmonicMeterTable.Name
               Dimensions:
-                - Name: meter_id
-                  Value: '${meter_id}'
+                - Name: harmonic_meter_series_id
+                  Value: '${harmonic_meter_series_id}'
               Timestamp:
                 Unit: MILLISECONDS
-                Value: ${timestamp}
+                Value: ${time}
               RoleArn: !GetAtt 
                 - TimestreamWriteRole
                 - Arn
@@ -125,7 +125,7 @@ Resources:
         EnableMagneticStoreWrites: true
       TableName: customer-meter-data
       RetentionProperties:
-        MagneticStoreRetentionPeriodInDays: 3650
+        MagneticStoreRetentionPeriodInDays: 1825
         MemoryStoreRetentionPeriodInHours: 1
     DependsOn:
       - TimestreamDB
@@ -138,7 +138,7 @@ Resources:
         EnableMagneticStoreWrites: true
       TableName: harmonic-meter-data
       RetentionProperties:
-        MagneticStoreRetentionPeriodInDays: 3650
+        MagneticStoreRetentionPeriodInDays: 1825
         MemoryStoreRetentionPeriodInHours: 1
     DependsOn:
       - TimestreamDB  
