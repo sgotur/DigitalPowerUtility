@@ -43,17 +43,17 @@ def publish_customer_data(topic, meterid, timestamp, uom, value):
     print("Message published for {0} with payload {1}".format(meterid, payload))
 
 #publish harmonics meter data
-def publish_harmonics_data(topic, timestamp, measurement, value):
+def publish_harmonics_data(topic, timestamp, meter_id, value):
     payload = {
-            'harmonic_meter_series_id':measurement,
-            'measure_name':'meter-reading',
-            'meter_measure_value': value,
+            'harmonic_meter_series_id':meter_id,
+            # 'measure_name':'meter-reading',
+            'harmonics_value': value,
             'time': timestamp
     }
     mqttc.json_encode = json_encode
     payload_json = mqttc.json_encode(payload)
     mqttc.publish(topic, payload_json, 0)
-    print("Message published for {0} with payload {1}".format(measurement, payload))
+    print("Message published for {0} with payload {1}".format(meter_id, payload))
 
 #publish customer or harmonics meter data based on user option
 def mqtt_publish_data():
