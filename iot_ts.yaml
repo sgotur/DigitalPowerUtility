@@ -57,13 +57,10 @@ Resources:
                 Unit: MILLISECONDS
                 Value: ${time}
               RoleArn: !GetAtt 
-                - TimestreamWriteRole
+                - TimestreamCustomerMeterWriteRole
                 - Arn
     DependsOn:
-      - TimestreamWriteRole
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 6dd134d6-5919-481b-a29b-4d6ec64cd302
+      - TimestreamCustomerMeterWriteRole
   
   DPUHarmonicssRule:
     Type: 'AWS::IoT::TopicRule'
@@ -82,12 +79,12 @@ Resources:
                 Unit: MILLISECONDS
                 Value: ${time}
               RoleArn: !GetAtt 
-                - TimestreamWriteRole
+                - TimestreamHarmonicMeterWriteRole
                 - Arn
     DependsOn:
-      - TimestreamWriteRole
+      - TimestreamHarmonicMeterWriteRole
  
-  TimestreamWriteRole:
+  TimestreamCustomerMeterWriteRole:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
@@ -105,7 +102,7 @@ Resources:
               - Effect: Allow
                 Action: 'timestream:WriteRecords'
                 Resource: !GetAtt 
-                  - TimestreamDB
+                  - CustomerMeterTable
                   - Arn
               - Effect: Allow
                 Action: 'timestream:DescribeEndpoints'
@@ -113,9 +110,33 @@ Resources:
     DependsOn:
       - CustomerMeterTable
       - HarmonicMeterTable
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: ce27b6cb-76f9-49e8-ac20-f70c790f4c80
+  
+  TimestreamHarmonicMeterWriteRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: iot.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: TimestreamWritePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 'timestream:WriteRecords'
+                Resource: !GetAtt 
+                  - HarmonicMeterTable
+                  - Arn
+              - Effect: Allow
+                Action: 'timestream:DescribeEndpoints'
+                Resource: '*'
+    DependsOn:
+      - CustomerMeterTable
+      - HarmonicMeterTable
   
   CustomerMeterTable:
     Type: 'AWS::Timestream::Table'
@@ -147,6 +168,4 @@ Resources:
     Type: 'AWS::Timestream::Database'
     Properties:
       DatabaseName: dpu
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: c2c8bed8-2023-4bf8-b0a7-d3c085a57533
+
