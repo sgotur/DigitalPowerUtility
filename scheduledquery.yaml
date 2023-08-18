@@ -1,12 +1,13 @@
+
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Create a Timestream database and a tables and scheduled query
 Parameters:
   TSDatabase:
     Type: String
-    Default: sample
+    Default: dpu
   TSTable:
     Type: String
-    Default: dw_data
+    Default: customer-meter-data-multi
   S3BucketName:
     Type: String
     Default: sg-dpu-timestream-0831
@@ -43,17 +44,21 @@ Resources:
     Type: AWS::Timestream::Table
     Properties:
       DatabaseName: !Ref MyDatabase
+      TableName: !Ref TSTable
       RetentionProperties:
         MemoryStoreRetentionPeriodInHours: "24"
-        MagneticStoreRetentionPeriodInDays: "7"
+        MagneticStoreRetentionPeriodInDays: "2000"        
   MyAggregatedTable:
     Type: AWS::Timestream::Table
     Properties:
       DatabaseName: !Ref TSDatabase
+      TableName: !Ref TSTable
       RetentionProperties:
         MemoryStoreRetentionPeriodInHours: "24"
-        MagneticStoreRetentionPeriodInDays: "7"
-
+        MagneticStoreRetentionPeriodInDays: "2000"
+      MagneticStoreWriteProperties:
+        EnableMagneticStoreWrites: true
+      
   ScheduledQueryExecutionRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -114,7 +119,6 @@ Resources:
               - timestream:WriteRecords
             Resource:
               - "*" #GetAtt MyAggregatedTable.Arn
-
   MyScheduledQuery:
     Type: AWS::Timestream::ScheduledQuery
     Condition: EnableSQ
@@ -130,15 +134,16 @@ Resources:
       QueryString: !Sub |
         with pivot as (
         select meter_id,time,
-        case when measure_name = 'current' then measure_value::double end as current,
-        case when measure_name = 'rssi' then measure_value::double end as rssi,
+        case when measure_name = 'kwh' then measure_value::double end as kwh,
+        case when measure_name = 'rssi' then measure_value::bigint end as rssi,
         case when measure_name = 'pf' then measure_value::double end as pf,
         case when measure_name = 'voltage' then measure_value::double end as voltage 
-        FROM "dpu"."customer-meter-data-raw"
-        where time between bin(now(), 5m) - 1h AND now()
+        FROM "dpu"."customer-meter-data"
+        -- where time between bin(now(), 5m) - 1h AND now()
+        where time between ('2022-09-01 00:00:00.00000000') AND ('2022-09-30 23:00:00.00000000')
         )
         select meter_id,time,
-        max("current") as "current",
+        max("kwh") as "kwh",
         max("rssi") as "rssi",
         max("pf") as "pf",
         max("voltage") as "voltage",
@@ -158,9 +163,9 @@ Resources:
           MultiMeasureMappings:
             MultiMeasureAttributeMappings:
               - MeasureValueType: "DOUBLE"
-                SourceColumn: "current"
-                TargetMultiMeasureAttributeName: "current"
-              - MeasureValueType: "DOUBLE"
+                SourceColumn: "kwh"
+                TargetMultiMeasureAttributeName: "kwh"
+              - MeasureValueType: "BIGINT"
                 SourceColumn: "rssi"
                 TargetMultiMeasureAttributeName: "rssi"
               - MeasureValueType: "DOUBLE"
@@ -171,80 +176,77 @@ Resources:
                 TargetMultiMeasureAttributeName: "voltage"
           TableName: !GetAtt MyAggregatedTable.Name
           TimeColumn: "time"
-  WaitHandle:
-    Type: AWS::CloudFormation::WaitConditionHandle
-  WaitCondition:
-    Type: AWS::CloudFormation::WaitCondition
-    DependsOn: MyScheduledQuery
-    Properties:
-      Handle: !Ref 'WaitHandle'
-      Timeout: '5000'
+  # WaitHandle:
+  #   Type: AWS::CloudFormation::WaitConditionHandle
+  # WaitCondition:
+  #   Type: AWS::CloudFormation::WaitCondition
+  #   DependsOn: MyScheduledQuery
+  #   Properties:
+  #     Handle: !Ref 'WaitHandle'
+  #     Timeout: '5000'
  
-  MyCorrelatedScheduledQuery:
-    Type: AWS::Timestream::ScheduledQuery
-    Condition: EnableSQ
-    # DependsOn: CustomResource
-    Properties:
-      ErrorReportConfiguration:
-        S3Configuration:
-          BucketName: !Ref S3Bucket
-          ObjectKeyPrefix: !Ref S3Prefix
-      NotificationConfiguration:
-        SnsConfiguration:
-          TopicArn: !Ref ScheduledQuerySNS
-      QueryString: !Sub |
-        WITH cud_result AS (
-        SELECT meter_id,INTERPOLATE_LINEAR(
-            CREATE_TIME_SERIES(time, meter_measure_value),
-            SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result 
-        FROM "dpu"."customer-meter-data"  
-        WHERE measure_name = 'meter-reading' 
-          AND time  between bin(now(), 5m) - 1h AND now() 
-        GROUP BY  meter_id, measure_name
-        ), 
-        hmd_result AS (
-            SELECT harmonic_meter_series_id, INTERPOLATE_LINEAR(
-                CREATE_TIME_SERIES(time, meter_measure_value), 
-              SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result  
-            FROM "dpu"."harmonic-meter-data"  
-            WHERE measure_name = 'meter-reading' 
-           AND time  between bin(now(), 5m) - 1h AND now() 
-            GROUP BY  harmonic_meter_series_id, measure_name
-        ) 
-        SELECT cud_result.meter_id, hmd_result.harmonic_meter_series_id, correlate_pearson(cud_result.result, hmd_result.result) AS result 
-        FROM cud_result, hmd_result
-        order by 1,2
-
-      ScheduleConfiguration:
-        ScheduleExpression: "rate(1 hour)"
-      ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
-      TargetConfiguration:
-        TimestreamConfiguration:
-          DatabaseName: !Ref TSDatabase
-          DimensionMappings:
-            - DimensionValueType: "VARCHAR"
-              Name: "meter_id"
-          MeasureNameColumn: "measure_name"
-          MultiMeasureMappings:
-            MultiMeasureAttributeMappings:
-              - MeasureValueType: "DOUBLE"
-                SourceColumn: "current"
-                TargetMultiMeasureAttributeName: "current"
-              - MeasureValueType: "DOUBLE"
-                SourceColumn: "rssi"
-                TargetMultiMeasureAttributeName: "rssi"
-              - MeasureValueType: "DOUBLE"
-                SourceColumn: "pf"
-                TargetMultiMeasureAttributeName: "pf"
-              - MeasureValueType: "DOUBLE"
-                SourceColumn: "voltage"
-                TargetMultiMeasureAttributeName: "voltage"
-          TableName: !GetAtt MyAggregatedTable.Name
-          TimeColumn: "time"
-
+  # MyCorrelatedScheduledQuery:
+  #   Type: AWS::Timestream::ScheduledQuery
+  #   Condition: EnableSQ
+  #   # DependsOn: CustomResource
+  #   Properties:
+  #     ErrorReportConfiguration:
+  #       S3Configuration:
+  #         BucketName: !Ref S3Bucket
+  #         ObjectKeyPrefix: !Ref S3Prefix
+  #     NotificationConfiguration:
+  #       SnsConfiguration:
+  #         TopicArn: !Ref ScheduledQuerySNS
+  #     QueryString: !Sub |
+        # WITH cud_result AS (
+        # SELECT meter_id,INTERPOLATE_LINEAR(
+        #     CREATE_TIME_SERIES(time, kwh),
+        #     SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result 
+        # FROM "dpu"."customer-meter-data-multi"  
+        # WHERE measure_name = 'kwh' 
+        #    AND time  between ('2022-09-01 08:00:00.00000000') and ('2022-09-30 08:00:00.00000000') 
+        # GROUP BY  meter_id, measure_name
+        # ), 
+        # hmd_result AS (
+        #     SELECT harmonic_meter_series_id, INTERPOLATE_LINEAR(
+        #         CREATE_TIME_SERIES(time, measure_value::double), 
+        #       SEQUENCE(min('2022-09-01 08:00:00.00000000'), max('2022-09-30 00:00:00.000000000'), 10m)) AS result  
+        #     FROM "dpu"."harmonic-meter-data"  
+        #     WHERE measure_name = 'harmonics_value' 
+        #    AND time  between ('2022-09-01 08:00:00.00000000') and ('2022-09-30 08:00:00.00000000') 
+        #     GROUP BY  harmonic_meter_series_id, measure_name
+        # ) 
+        # SELECT cud_result.meter_id, hmd_result.harmonic_meter_series_id, correlate_pearson(cud_result.result, hmd_result.result) AS result 
+        # FROM cud_result, hmd_result
+        # order by 1,2
+  #     ScheduleConfiguration:
+  #       ScheduleExpression: "rate(1 hour)"
+  #     ScheduledQueryExecutionRoleArn: !GetAtt ScheduledQueryExecutionRole.Arn
+  #     TargetConfiguration:
+  #       TimestreamConfiguration:
+  #         DatabaseName: !Ref TSDatabase
+  #         DimensionMappings:
+  #           - DimensionValueType: "VARCHAR"
+  #             Name: "meter_id"
+  #         MeasureNameColumn: "measure_name"
+  #         MultiMeasureMappings:
+  #           MultiMeasureAttributeMappings:
+  #             - MeasureValueType: "DOUBLE"
+  #               SourceColumn: "current"
+  #               TargetMultiMeasureAttributeName: "current"
+  #             - MeasureValueType: "DOUBLE"
+  #               SourceColumn: "rssi"
+  #               TargetMultiMeasureAttributeName: "rssi"
+  #             - MeasureValueType: "DOUBLE"
+  #               SourceColumn: "pf"
+  #               TargetMultiMeasureAttributeName: "pf"
+  #             - MeasureValueType: "DOUBLE"
+  #               SourceColumn: "voltage"
+  #               TargetMultiMeasureAttributeName: "voltage"
+  #         TableName: !GetAtt MyAggregatedTable.Name
+  #         TimeColumn: "time"
   ScheduledQuerySNS:
     Type: AWS::SNS::Topic
-
   S3Bucket:
     # DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
@@ -266,7 +268,6 @@ Resources:
       # LoggingConfiguration:
       #   DestinationBucketName: !Ref S3AccessLogsBucketName
       #   LogFilePrefix: ${S3AccessLogsBucketName}/${S3BucketName}/
-
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -285,7 +286,6 @@ Resources:
             Condition:
               Bool:
                 "aws:SecureTransport": "false"
-
 Outputs:
   DatabaseName:
     Description: Timestream Database Name
