@@ -46,7 +46,7 @@ def publish_customer_data(topic, meterid, timestamp, uom, value):
 def publish_harmonics_data(topic, timestamp, meter_id, value):
     payload = {
             'harmonic_meter_series_id':meter_id,
-            'harmonics_value': value,
+            'harmonics_value': float(value),
             'time': timestamp
     }
     mqttc.json_encode = json_encode
