@@ -9,7 +9,7 @@ from AWSIoTPythonSDK.MQTTLib import AWSIoTMQTTClient
 # Get the script parameters: a) AWS IoT Core endpoint url. b) publish option: customer or harmonics data
 parser = argparse.ArgumentParser()
 parser.add_argument('-e', '--endpoint', type=str, required=True, help='AWS IoT Core endpoint url that AWSIoTMQTTClient connects to.')
-parser.add_argument('-o', '--option', type=str, required=False, default='ALL', help='CUSTOMER: publishing customer data  HARMONICS: publishing harmonics data')
+parser.add_argument('-o', '--option', type=str, required=False, default='ALL', help='CUSTOMER: publishing customer data.  HARMONICS: publishing harmonics data. ALL: Both the data.')
 args = vars(parser.parse_args())
 endpoint = args['endpoint']
 option = args['option']
