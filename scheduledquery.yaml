@@ -1,4 +1,3 @@
-
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Create a Timestream database and a tables and scheduled query
 Parameters:
@@ -50,7 +49,7 @@ Resources:
       TableName: !Ref TSTable
       RetentionProperties:
         MemoryStoreRetentionPeriodInHours: "24"
-        MagneticStoreRetentionPeriodInDays: "2000"        
+        MagneticStoreRetentionPeriodInDays: "2000"
   MyAggregatedTable:
     Type: AWS::Timestream::Table
     Properties:
@@ -71,7 +70,7 @@ Resources:
         MagneticStoreRetentionPeriodInDays: "2000"
       MagneticStoreWriteProperties:
         EnableMagneticStoreWrites: true
-      
+
   ScheduledQueryExecutionRole:
     Type: "AWS::IAM::Role"
     Properties:

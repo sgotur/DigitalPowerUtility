@@ -4,3 +4,5 @@
 *.dtmp
 temp/
 .DS_Store
+scheduledquery-2.yaml
+
